@@ -114,6 +114,13 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
         if "inputs_embeds" in kwargs:
             raise NotImplementedError("`inputs_embeds` is not supported")
 
+        print(f"input image tensor is {type(images)}")
+        print(f"size or len of image tensor: {images if isinstance(images, list) else images.shape}")
+        # print(f"image sizes: {image_sizes}")
+
+        print(f"token sequence batch*length: {inputs.size()}")
+        # print(f"token sequence: {inputs[0]}")
+
         if images is not None:
             (
                 inputs,
@@ -134,6 +141,7 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
         else:
             inputs_embeds = self.get_model().embed_tokens(inputs)
 
+        print(f"embedding sequence batch*length*dim: {inputs_embeds.size()}")
         return super().generate(
             position_ids=position_ids,
             attention_mask=attention_mask,

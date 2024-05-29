@@ -33,3 +33,21 @@ ckpts*
 
 # Demo
 serve_images/
+
+# ckp
+llava-*/*
+clip-vit-large-patch14-336/*
+llava-v1.6-34b.tar.gz
+
+# sbatch scripts
+*.sbatch
+salloc
+
+# my own .py
+download.py
+test.py
+
+# images
+images/*
+
+environment.yml

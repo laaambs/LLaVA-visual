@@ -97,8 +97,8 @@ def eval_model(args):
     prompt = conv.get_prompt()
 
     image_files = image_parser(args)
-    images = load_images(image_files)
-    image_sizes = [x.size for x in images]
+    images = load_images(image_files)  # list of RGB images
+    image_sizes = [x.size for x in images]  # list of (width, height)
     images_tensor = process_images(
         images,
         image_processor,

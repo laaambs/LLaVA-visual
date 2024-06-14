@@ -1,4 +1,8 @@
 import argparse
+import os
+import pickle
+
+import numpy as np
 import torch
 
 from llava.constants import (
@@ -112,7 +116,7 @@ def eval_model(args):
     )
 
     with torch.inference_mode():
-        output_ids = model.generate(
+        outputs = model.generate(
             input_ids,
             images=images_tensor,
             image_sizes=image_sizes,
@@ -122,10 +126,16 @@ def eval_model(args):
             num_beams=args.num_beams,
             max_new_tokens=args.max_new_tokens,
             use_cache=True,
+            # output_attentions=True,
+            # return_dict_in_generate=True
         )
-
-    outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
-    print(outputs)
+    print(f"sequences: {type(outputs.sequences)}, {outputs.sequences.shape}"
+          f"\n{outputs.sequences}")
+    # print(f"tuple_attentions: {type(outputs.attentions)}, {len(outputs.attentions)}")
+    # print(f"tuple_attentions[0]: {type(outputs.attentions[0])}, {len(outputs.attentions[0])}")
+    # print(f"tuple_attentions[0][0]: {type(outputs.attentions[0][0])}, {outputs.attentions[0][0].shape}")
+    output_tokens = tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)[0].strip()
+    print(f"outputs: {output_tokens}")
 
 
 if __name__ == "__main__":

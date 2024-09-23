@@ -128,7 +128,7 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
                 attention_mask,
                 _,
                 inputs_embeds,
-                _
+                _,
             ) = self.prepare_inputs_labels_for_multimodal(
                 inputs,
                 position_ids,
@@ -136,12 +136,13 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
                 None,
                 None,
                 images,
-                image_sizes=image_sizes
+                image_sizes=image_sizes,
             )
         else:
             inputs_embeds = self.get_model().embed_tokens(inputs)
 
         print(f"embedding sequence batch*length*dim: {inputs_embeds.size()}")
+
         return super().generate(
             position_ids=position_ids,
             attention_mask=attention_mask,

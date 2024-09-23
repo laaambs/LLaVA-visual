@@ -50,5 +50,8 @@ test.py
 
 # images
 images/*
+attentions/*
+features/*
 
 environment.yml
+

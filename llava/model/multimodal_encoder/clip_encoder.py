@@ -25,11 +25,9 @@ class CLIPVisionTower(nn.Module):
         if self.is_loaded:
             print('{} is already loaded, `load_model` called again, skipping.'.format(self.vision_tower_name))
             return
-
         self.image_processor = CLIPImageProcessor.from_pretrained(self.vision_tower_name)
         self.vision_tower = CLIPVisionModel.from_pretrained(self.vision_tower_name, device_map=device_map)
         self.vision_tower.requires_grad_(False)
-
         self.is_loaded = True
 
     def feature_select(self, image_forward_outs):
@@ -42,45 +40,47 @@ class CLIPVisionTower(nn.Module):
             raise ValueError(f'Unexpected select feature: {self.select_feature}')
         return image_features
 
-    def get_shape(self, x):
-        if isinstance(x, torch.Tensor):
-            return x.shape
-        elif isinstance(x, tuple):
-            x = [sub_x for sub_x in x]
-            x = torch.cat(x, dim=0)
-            return x.shape
+    def attention_select(self, image_forward_outs, select_attention='cls'):
+        attentions = image_forward_outs.attentions[self.select_layer]
+        # print(f"before selected attentions shape: {attentions.shape}")
+        if select_attention == 'cls':
+            attentions = attentions[:, :, 0, 1:]
+        else:
+            raise ValueError(f'Unexpected select attention')
+        return attentions
 
     @torch.no_grad()
     def forward(self, images, output_attentions=False):
         if type(images) is list:
             image_features = []
-            feature_attentions = [] if output_attentions else None
+            image_attentions = [] if output_attentions else None
             for image in images:
                 image_forward_out = self.vision_tower(image.to(device=self.device, dtype=self.dtype).unsqueeze(0),
                                                       output_hidden_states=True,
                                                       output_attentions=output_attentions)
                 image_feature = self.feature_select(image_forward_out).to(image.dtype)
                 image_features.append(image_feature)
-                print(f"image shape: ".format(image.shape))
-                print(f"hidden state shape: ".format(self.get_shape(image_forward_out.hidden_states)))
-                print(f"attention shape: ".format(self.get_shape(image_forward_out.attentions)))
-                print(f"image feature shape: ".format(image_feature.shape))
-                # if output_attentions:
-                #     feature_attention = image_forward_out.attentions[self.select_layer, :, 0, 1:]
-                #     feature_attentions.append(feature_attention)
-        else:
+                # print(f"image shape: {image.shape}")
+                # print(f"hidden state shape: {self.get_shape(image_forward_out.hidden_states)}")
+                # print(f"attention shape: {self.get_shape(image_forward_out.attentions)}")
+                # print(f"image feature shape: {image_feature.shape}")
+                if output_attentions:
+                    image_attention = self.attention_select(image_forward_out)
+                    image_attentions.append(image_attention)
+        else:  # 7b & 13b
+            image_attentions = None
             image_forward_outs = self.vision_tower(images.to(device=self.device, dtype=self.dtype),
                                                    output_hidden_states=True,
                                                    output_attentions=output_attentions)
-            print(f"images shape: ".format(images.shape))
-            print(f"hidden states shape: ".format(self.get_shape(image_forward_outs.hidden_states)))
-            print(f"attentions shape: ".format(self.get_shape(image_forward_outs.attentions)))
             image_features = self.feature_select(image_forward_outs).to(images.dtype)
-            print(f"image features shape: ".format(image_features.shape))
-            # if output_attentions:
-            #     feature_attentions = image_forward_outs.attentions[self.select_layer, :, 0, 1:]
+            # print(f"images shape: {images.shape}")
+            # print(f"hidden states shape: {self.get_shape(image_forward_outs.hidden_states)}")
+            # print(f"attentions shape: {self.get_shape(image_forward_outs.attentions)}")
+            # print(f"image features shape: {image_features.shape}")
+            if output_attentions:
+                image_attentions = self.attention_select(image_forward_outs)
 
-        return image_features
+        return {"image_features": image_features, "image_attentions": image_attentions}
 
     @property
     def dummy_feature(self):

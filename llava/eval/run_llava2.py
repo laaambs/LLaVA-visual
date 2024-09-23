@@ -142,6 +142,17 @@ def eval_model(args):
             .unsqueeze(0)
             .cuda()
         )
+        
+        # # Hook to capture embeddings
+        # embeddings = []
+        
+        # def hook(module, input, output):
+        #     # print(f"lm_head output:{output.shape}")
+        #     if output.shape[1]==1:
+        #         embeddings.append(torch.stack(input, dim=0))
+
+        # # Register hook
+        # handle = model.lm_head.register_forward_hook(hook)
 
         with torch.inference_mode():
             output = model.generate(
@@ -153,6 +164,8 @@ def eval_model(args):
                 # temperature=args.temperature,
                 # top_p=args.top_p,
                 num_beams=args.num_beams,
+                num_beam_groups=args.num_beam_groups,
+                diversity_penalty=args.diversity_penalty,
                 num_return_sequences=args.num_beams,  # 返回所有束
                 max_new_tokens=args.max_new_tokens,
                 use_cache=True,
@@ -160,6 +173,19 @@ def eval_model(args):
                 output_scores=True,  # 输出分数
                 return_dict_in_generate=True,  # 返回字典格式的输出
             )
+            
+        # # Remove hook
+        # handle.remove()
+        # stacked_embeddings = torch.cat(embeddings, dim=2)  
+        # print(f"embeddings length:{stacked_embeddings.size(2)}")
+
+        # # Calculate L2 norm of embeddings for each beam
+        # l2_norms_per_beam = [[[] for _ in range(args.num_beams)] for _ in range(stacked_embeddings.size(0))]
+        # for sample_idx in range(stacked_embeddings.size(0)):
+        #     for beam_idx in range(args.num_beams):
+        #         for seq_idx in range(stacked_embeddings.size(2)):
+        #             l2_norms_per_beam[sample_idx][beam_idx].append(stacked_embeddings[sample_idx, beam_idx, seq_idx].norm(2).item())
+
 
         # print(f"tuple_attentions: {type(outputs.attentions)}, {len(outputs.attentions)}")
         # print(f"tuple_attentions[0]: {type(outputs.attentions[0])}, {len(outputs.attentions[0])}")
@@ -218,23 +244,29 @@ def eval_model(args):
             )
         ).to(dtype=torch.float16, device=model.device)
 
-        token_probs = []
-        for i in range(args.num_beams):
-            seq_probs = []
-            for j, score in enumerate(output.scores):
-                if j + 1 == len(output.sequences[i]):
-                    break
-                # 获取当前位置的token id
-                token_id = output.sequences[i, j + 1].item()
-                # 计算该token的概率
-                prob = score[i, token_id].exp().item()
-                seq_probs.append(prob)
-            token_probs.append(seq_probs)
+        # token_probs = []
+        # for i in range(args.num_beams):
+        #     seq_probs = []
+        #     for j, score in enumerate(output.scores):
+        #         if j + 1 == len(output.sequences[i]):
+        #             break
+        #         # 获取当前位置的token id
+        #         token_id = output.sequences[i, j + 1].item()
+        #         # 计算该token的概率
+        #         prob = score[i, token_id].exp().item()
+        #         seq_probs.append(prob)
+        #     token_probs.append(seq_probs)
 
-        candidate_probs = []
-        for candidate_sequence, token_prob in zip(output.sequences, token_probs):
-            tokens = tokenizer.convert_ids_to_tokens(candidate_sequence[1:])
-            candidate_probs.append({"sequence": tokens, "probs": token_prob})
+        # candidate_probs = []
+        # for candidate_sequence, token_prob in zip(output.sequences, token_probs):
+        #     tokens = tokenizer.convert_ids_to_tokens(candidate_sequence[1:])
+        #     candidate_probs.append({"sequence": tokens, "probs": token_prob})
+            
+        # candidate_norms = []
+        # for candidate_sequence, token_norm in zip(output.sequences, l2_norms_per_beam[0]):
+        #     tokens = tokenizer.convert_ids_to_tokens(candidate_sequence[1:])
+        #     candidate_norms.append({"sequence": tokens, "norms": token_norm})
+
 
         confident_scores = (
             args.alpha * init_log_probs
@@ -252,6 +284,7 @@ def eval_model(args):
             length_compensation,
             consistency_score,
             confident_score,
+            # candidate_norm
         ) in zip(
             candidate_sequences,
             init_log_probs,
@@ -260,16 +293,19 @@ def eval_model(args):
             length_compensations,
             consistency_scores,
             confident_scores,
+            # candidate_norms
         ):
             results.append(
                 {
                     "sequence": seq.strip(),
+                    # "token_seq": candidate_norm["sequence"],
                     "init_score": init_score.item(),
                     "avg_score": avg_score.item(),
                     "seq_length": seq_length.item(),
                     "length_compensation": length_compensation.item(),
                     "consistency_score": consistency_score.item(),
                     "confident_score": confident_score.item(),
+                    # "norms": candidate_norm["norms"]
                 }
             )
 
@@ -278,8 +314,7 @@ def eval_model(args):
                 "prompt": query,
                 "scored_candidates": sorted(
                     results, key=lambda x: x["confident_score"], reverse=True
-                ),
-                "candidate_probs": candidate_probs,
+                    )
             }
         )
     return total_results
